@@ -88,6 +88,41 @@ errors occur near the ends of the fitted range. The calibration procedure,
 measurement limitations, and challenges are documented in
 [`pot_servo/README.md`](pot_servo/README.md).
 
+### Sharp IR Sensor Calibration and Conversion Error
+
+The Sharp GP2Y0A21YK IR sensor provides an analog voltage that varies
+with the distance to a reflective object. To obtain distance readings
+in physical units, we experimentally calibrated the sensor using
+objects placed at known distances.
+
+At each calibration distance, the sensor's output voltage was recorded.
+The measured voltage-distance pairs were used to obtain a linear
+least-squares fit:
+
+`distance_cm = -23.4382 × voltage_V + 76.6889`
+
+The resulting conversion is used by the Arduino firmware to estimate
+distance in centimeters. The calculated distance is clamped to the
+sensor's specified operating range of **10–80 cm**.
+
+#### Calibration measurements and conversion error
+
+The conversion error was evaluated by applying the fitted equation
+to the calibration voltage readings and comparing the resulting
+distances against the corresponding reference distances.
+
+| Actual distance (cm) | Measured voltage (V) | Calculated distance (cm) | Absolute error (cm) |
+|---:|---:|---:|---:|
+| 10 | 2.80 | 11.06 | 1.06 |
+| 20 | 2.50 | 18.09 | 1.91 |
+| 30 | 1.98 | 30.28 | 0.28 |
+| 40 | 1.48 | 42.00 | 2.00 |
+| 50 | 1.20 | 48.56 | 1.44 |
+
+The mean absolute error across these calibration points is **1.34 cm**,
+with a maximum absolute error of **2.00 cm**.
+
+
 ### ToF filtering: raw and filtered readings together
 
 The lab requires raw and filtered sensor data to be shown together to demonstrate
