@@ -139,7 +139,7 @@ Measurement error was calculated using:
 #### Ultrasonic distance error table
 
 | Actual (cm) | Measured (cm) | Error (cm) | Absolute error (cm) | Error (%) |
-|---:|---:|---:|---:|---:|---|
+|---:|---:|---:|---:|---:|
 | 10 | 12 | +2 | 2 | 20.00 |
 | 20 | 21 | +1 | 1 | 5.00 |
 | 30 | 27 | -3 | 3 | 10.00 |
