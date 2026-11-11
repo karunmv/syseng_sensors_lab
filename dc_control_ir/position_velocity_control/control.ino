@@ -1,10 +1,14 @@
+
 // Example Serial commands:
 // POS,30    -> Move +30 degrees from current position
 // POS,-30   -> Move -30 degrees from current position
+// VEL,5     -> Run at +5 RPM
+// VEL,-5    -> Run at -5 RPM
+// VEL,0     -> Stop velocity mode
 // STOP      -> Stop motor
 //
 // Serial feedback:
-// STATUS,MODE,TARGET,POSITION,ERROR,PWM
+// STATUS,MODE,TARGET,POSITION,VELOCITY,ERROR,PWM
 // =====================================================
 
 #include <stdlib.h>
@@ -32,11 +36,14 @@ const float COUNTS_PER_DEG = COUNTS_PER_REV / 360.0;
 const int MAX_PWM = 180;
 const int MIN_PWM = 65;
 
+const float MAX_TARGET_RPM = 12.0;
+
 // ---------------- Control modes ----------------
 
 enum ControlMode {
   IDLE,
-  POSITION
+  POSITION,
+  VELOCITY
 };
 
 ControlMode mode = IDLE;
@@ -53,12 +60,28 @@ float previousAngle = 0;
 
 const float POSITION_TOLERANCE = 1.5;
 
+// ---------------- Velocity PI ----------------
+
+float Kp_vel = 4.0;
+float Ki_vel = 3.0;
+
+const int VELOCITY_MIN_PWM = 55;
+const float VELOCITY_DEADBAND = 0.10;
+
+float targetRPM = 0;
+float velIntegral = 0;
+
+float actualRPM = 0;
+long previousVelocityCount = 0;
+
 // ---------------- Timing ----------------
 
 unsigned long previousPositionTime = 0;
+unsigned long previousVelocityTime = 0;
 unsigned long lastPrintTime = 0;
 
 const unsigned long POSITION_INTERVAL = 10;
+const unsigned long VELOCITY_INTERVAL = 50;
 const unsigned long PRINT_INTERVAL = 100;
 
 // ---------------- Motor state ----------------
@@ -166,6 +189,77 @@ int setMotor(int pwm) {
 }
 
 // =====================================================
+// SET MOTOR FOR VELOCITY CONTROL
+// Allows PWM values starting at 55
+// =====================================================
+
+int setVelocityMotor(int pwm) {
+
+  pwm = constrain(pwm, -MAX_PWM, MAX_PWM);
+
+  if (pwm > 0) {
+
+    digitalWrite(IN1, HIGH);
+    digitalWrite(IN2, LOW);
+
+    int appliedPWM = max(pwm, VELOCITY_MIN_PWM);
+
+    analogWrite(EN, appliedPWM);
+
+    currentPWM = appliedPWM;
+
+    return appliedPWM;
+  }
+
+  else if (pwm < 0) {
+
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, HIGH);
+
+    int appliedPWM = max(-pwm, VELOCITY_MIN_PWM);
+
+    analogWrite(EN, appliedPWM);
+
+    currentPWM = -appliedPWM;
+
+    return -appliedPWM;
+  }
+
+  stopMotor();
+
+  return 0;
+}
+
+// =====================================================
+// UPDATE VELOCITY FROM ENCODER
+// =====================================================
+
+void updateVelocity(float dt) {
+
+  long currentCount = getEncoderCount();
+
+  long deltaCount = currentCount - previousVelocityCount;
+
+  actualRPM =
+      (deltaCount / COUNTS_PER_REV) * (60.0 / dt);
+
+  previousVelocityCount = currentCount;
+}
+
+// =====================================================
+// RESET VELOCITY MEASUREMENT
+// =====================================================
+
+void resetVelocityMeasurement() {
+
+  previousVelocityCount = getEncoderCount();
+  actualRPM = 0;
+  velIntegral = 0;
+
+  previousVelocityTime = millis();
+}
+
+// =====================================================
 // PROCESS SERIAL COMMAND
 // =====================================================
 
@@ -187,11 +281,34 @@ void processCommand(char *command) {
     Serial.println("ACK,POS");
   }
 
+  else if (strncmp(command, "VEL,", 4) == 0) {
+
+    targetRPM = atof(command + 4);
+
+    targetRPM = constrain(
+      targetRPM,
+      -MAX_TARGET_RPM,
+      MAX_TARGET_RPM
+    );
+
+    resetVelocityMeasurement();
+
+    mode = VELOCITY;
+
+    if (targetRPM == 0) {
+      mode = IDLE;
+      stopMotor();
+    }
+
+    Serial.println("ACK,VEL");
+  }
+
   else if (strcmp(command, "STOP") == 0) {
 
     mode = IDLE;
 
     posIntegral = 0;
+    velIntegral = 0;
 
     stopMotor();
 
@@ -279,6 +396,64 @@ void runPositionPID(float dt) {
 }
 
 // =====================================================
+// VELOCITY PI CONTROLLER
+// =====================================================
+
+void runVelocityPID(float dt) {
+
+  float direction = (targetRPM >= 0) ? 1.0 : -1.0;
+
+  float directionalRPM = direction * actualRPM;
+
+  float desiredRPM = fabs(targetRPM);
+
+  float error = desiredRPM - directionalRPM;
+
+  if (fabs(error) < VELOCITY_DEADBAND) {
+    error = 0;
+  }
+
+  // Update integral
+  float proposedIntegral = velIntegral + error * dt;
+
+  proposedIntegral = constrain(
+    proposedIntegral,
+    -20.0,
+    20.0
+  );
+
+  // PI output
+  float output =
+      VELOCITY_MIN_PWM
+    + Kp_vel * error
+    + Ki_vel * proposedIntegral;
+
+  // Anti-windup
+  if (!((output > MAX_PWM && error > 0) ||
+        (output < VELOCITY_MIN_PWM && error < 0))) {
+
+    velIntegral = proposedIntegral;
+  }
+
+  // Recalculate output
+  output =
+      VELOCITY_MIN_PWM
+    + Kp_vel * error
+    + Ki_vel * velIntegral;
+
+  output = constrain(
+    output,
+    (float)VELOCITY_MIN_PWM,
+    (float)MAX_PWM
+  );
+
+  int pwm = (int)output;
+
+  // Apply direction and PWM
+  setVelocityMotor((int)(direction * pwm));
+}
+
+// =====================================================
 // SEND FEEDBACK TO GUI
 // =====================================================
 
@@ -299,6 +474,14 @@ void sendStatus() {
     error = targetAngle - actualAngle;
   }
 
+  else if (mode == VELOCITY) {
+
+    modeName = "VEL";
+    target = targetRPM;
+
+    error = targetRPM - actualRPM;
+  }
+
   Serial.print("STATUS,");
   Serial.print(modeName);
 
@@ -307,6 +490,9 @@ void sendStatus() {
 
   Serial.print(",");
   Serial.print(actualAngle, 2);
+
+  Serial.print(",");
+  Serial.print(actualRPM, 2);
 
   Serial.print(",");
   Serial.print(error, 2);
@@ -341,11 +527,13 @@ void setup() {
   unsigned long now = millis();
 
   previousPositionTime = now;
+  previousVelocityTime = now;
   lastPrintTime = now;
 
   previousAngle = getAngle();
+  resetVelocityMeasurement();
 
-  Serial.println("READY,DC_MOTOR_POSITION_CONTROLLER");
+  Serial.println("READY,DC_MOTOR_CONTROLLER");
 }
 
 // =====================================================
@@ -368,6 +556,21 @@ void loop() {
     previousPositionTime = currentTime;
 
     runPositionPID(dt);
+  }
+
+  // Velocity controller
+  if (currentTime - previousVelocityTime >= VELOCITY_INTERVAL) {
+
+    float dt =
+      (currentTime - previousVelocityTime) / 1000.0;
+
+    previousVelocityTime = currentTime;
+
+    updateVelocity(dt);
+
+    if (mode == VELOCITY) {
+      runVelocityPID(dt);
+    }
   }
 
   // Feedback every 100 ms
