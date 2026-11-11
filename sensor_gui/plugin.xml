@@ -1,0 +1,11 @@
+<library path="sensor_gui">
+  <class name="SensorsMotors" type="sensor_gui.plugin.SensorsMotorsPlugin" base_class_type="rqt_gui_py::Plugin">
+    <description>Four-sensor, three-motor TSP05 dashboard.</description>
+    <qtgui>
+      <group><label>Sensors Lab</label></group>
+      <label>Sensors and Motors</label>
+      <icon type="theme">applications-engineering</icon>
+      <statustip>Control the Uno and view calibrated sensor/motor feedback.</statustip>
+    </qtgui>
+  </class>
+</library>

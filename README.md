@@ -1,19 +1,88 @@
-# Unified sensors and motors firmware
+# Sensors and Motor Control Lab
 
-Open `Unified_Sensors_Motors.ino` and upload to **Arduino Uno**. This folder is
-self-contained; the four teammates' original folders remain standalone references.
-The ROS 2 bridge and graphical panel are the next layer; they are not implemented
-by this firmware.
+Five-person team project for Systems Engineering 16-650, TSP05. The system combines
+four sensors and three motors on one Arduino Uno, with a laptop ROS 2 serial
+bridge and an rqt control/display panel.
+
+The unified firmware is in
+[`Unified_Sensors_Motors/`](Unified_Sensors_Motors/). Open
+[`Unified_Sensors_Motors.ino`](Unified_Sensors_Motors/Unified_Sensors_Motors.ino)
+to build/upload it. That folder contains all application firmware source files;
+the original teammate folders provide source history, calibration, and standalone
+experiments.
+
+## Repository layout
+
+| Folder | Role |
+|---|---|
+| [`Unified_Sensors_Motors/`](Unified_Sensors_Motors/) | Combined Uno application: sensor processing, all motor controllers, mode/button handling, and serial protocol v1. |
+| [`sensor_gui/`](sensor_gui/) | ROS 2 Humble serial bridge, rqt dashboard, serial-device simulator, launch file, and integration tests. |
+| [`arduino/TSP05_Motor_Control/`](arduino/TSP05_Motor_Control/) | Original integrated prototype; ultrasonic/stepper logic supplies that portion of the unified firmware. |
+| [`dc_control_ir/`](dc_control_ir/) | Original DC encoder PID/PI controller, IR-driven PWM controller, component tests, and documentation. |
+| [`pot_servo/`](pot_servo/) | Potentiometer/servo calibration and control, measured data, transfer/error plots, and plotting script. |
+| [`tof_filter/`](tof_filter/) | Original VL53L1X raw/filtered ranging experiment and exponential filter. |
+
+## System and current status
+
+| Sensor | Sensor-mode behavior | GUI feedback |
+|---|---|---|
+| Potentiometer | Commands servo angle | ADC, calibrated/raw and filtered angle, servo command |
+| Sharp IR rangefinder | Selects forward DC PWM | ADC, voltage, distance, detection, requested PWM |
+| Analog ultrasonic | Commands stepper target | ADC, raw and filtered distance, stepper estimate/target |
+| VL53L1X ToF | Display/filtering only | Raw and filtered millimeters, sample identity/time, validity |
+
+GUI control provides servo angle, DC relative position/velocity, and stepper
+relative angle commands. A debounced physical button or a serial command switches
+GUI/sensor mode. The serial format is defined below.
+
+The Uno firmware compiles and its desktop logic tests have passed. The ROS 2
+package and rqt dashboard are implemented, with simulated ROS/GUI and serial
+pseudo-terminal integration tests. Physical integration testing remains. The
+data path is:
+
+```text
+Sensors/motors ↔ Arduino Uno ↔ USB serial ↔ laptop ROS 2 node ↔ ROS topics ↔ GUI
+```
+
+The bridge owns the serial port, publishes physical-unit telemetry and validity/
+mode state, serializes commands while waiting for ACK/ERR, and discards commands
+after connection failures rather than replaying relative moves. The rqt panel
+provides motor controls, mode/stop controls, sensor and motor state displays,
+paired raw/filtered ToF plots, a DC velocity plot, and labelled ToF CSV export.
+Physical tests and remaining assignment evidence are listed at the end of this README.
+
+## Start the ROS 2 dashboard
+
+From the repository root:
+
+```sh
+source /opt/ros/humble/setup.bash
+colcon build --base-paths sensor_gui --symlink-install
+source install/setup.bash
+ros2 launch sensor_gui lab.launch.py simulate:=true
+```
+
+This starts synthetic data for GUI development; it is not sensor calibration
+evidence. To connect to the Uno, stop simulation and run:
+
+```sh
+ros2 launch sensor_gui lab.launch.py port:=/dev/ttyACM0
+```
+
+Upload the unified firmware first and close Arduino Serial Monitor/Plotter.
+The bridge waits for startup and protocol-v1 telemetry before enabling commands.
+See [`sensor_gui/README.md`](sensor_gui/README.md) for dependencies, topic names,
+command behavior, plotting/capture, reconnect/shutdown behavior, and tests.
 
 ## Source modules
 
 | Source | Retained behavior |
 |---|---|
-| `../arduino/TSP05_Motor_Control/` | Only analog ultrasonic conversion, EMA, and step/direction stepper control: 15–75 cm maps to 0–180°, 50-step target deadband, 1600 steps/rev, minimum 5000 µs between steps. |
-| `../pot_servo/firmware/pot_servo_control/` | Eight-read ADC average, measured angle conversion, EMA α=0.3, 80–300° pot range mapped to −90…+100° servo range, 610–2500 µs endpoint interpolation. |
-| `../dc_control_ir/position_velocity_control/` | Encoder interrupt method and 12375.12 counts/rev; position PID (3, 0.05, 0.2), ±1.5° tolerance; velocity PI (4, 3), anti-windup, deadband, ±12 RPM and original PWM limits. |
-| `../dc_control_ir/ir_control/` | Ten-read average, measured distance approximation, 10–80 cm clamp, six original PWM levels, 2 cm hysteresis, 0.30/0.35 V detection hysteresis. |
-| `../tof_filter/` | VL53L1X long mode, 50 ms measurement budget/continuous interval, valid samples only, normalized exponential weighting (α=0.1) over the latest ten accepted samples. No motor association. |
+| `arduino/TSP05_Motor_Control/` | Only analog ultrasonic conversion, EMA, and step/direction stepper control: 15–75 cm maps to 0–180°, 50-step target deadband, 1600 steps/rev, minimum 5000 µs between steps. |
+| `pot_servo/firmware/pot_servo_control/` | Eight-read ADC average, measured angle conversion, EMA α=0.3, 80–300° pot range mapped to −90…+100° servo range, 610–2500 µs endpoint interpolation. |
+| `dc_control_ir/position_velocity_control/` | Encoder interrupt method and 12375.12 counts/rev; position PID (3, 0.05, 0.2), ±1.5° tolerance; velocity PI (4, 3), anti-windup, deadband, ±12 RPM and original PWM limits. |
+| `dc_control_ir/ir_control/` | Ten-read average, measured distance approximation, 10–80 cm clamp, six original PWM levels, 2 cm hysteresis, 0.30/0.35 V detection hysteresis. |
+| `tof_filter/` | VL53L1X long mode, 50 ms measurement budget/continuous interval, valid samples only, normalized exponential weighting (α=0.1) over the latest ten accepted samples. No motor association. |
 
 Integration changes: modules share one scheduler and serial interface; IR samples
 are collected 5 ms apart without `delay()`; ToF readiness is polled before
@@ -50,11 +119,12 @@ DC PWM; D6 remains available. D0/D1 are reserved for USB serial. Use the default
 Connect motor power externally with common ground, and retain the driver current
 limits and encoder pull-ups required by the lab.
 
-`Config.h` holds pins, timing, original tuning, and calibration constants. Verify
+[`Unified_Sensors_Motors/Config.h`](Unified_Sensors_Motors/Config.h) holds pins,
+timing, original tuning, and calibration constants. Verify
 1600 step pulses per shaft revolution against the actual EasyDriver microstep
 configuration, and verify encoder scale/polarity before testing PID.
 
-## Build
+## Build the Arduino firmware
 
 Dependencies tested: Arduino AVR Boards **1.8.6** (or a compatible core with Wire
 timeouts), Arduino **Servo 1.3.0**, and Pololu **VL53L1X 1.3.1**. Select the Pololu library, not a different
@@ -69,8 +139,10 @@ arduino-cli lib install Servo@1.3.0 VL53L1X@1.3.1
 arduino-cli compile --fqbn arduino:avr:uno Unified_Sensors_Motors
 ```
 
-Only upload after checking the pin map and power arrangement. Desktop simulation
-tests live in `tests/` and run with `bash Unified_Sensors_Motors/tests/run.sh`.
+Only upload after checking the pin map and power arrangement. The local desktop
+simulation tests live in `Unified_Sensors_Motors/tests/` and run with
+`bash Unified_Sensors_Motors/tests/run.sh` when that directory is present. These
+tests are currently excluded from Git by `.gitignore`.
 They exercise logic/protocol behavior, not motor tuning, electrical wiring, or
 real sensor accuracy.
 
@@ -193,8 +265,9 @@ transfer plot and leave-one-out error analysis are retained in `pot_servo`.
 Before the demo, collect measured error over the usable range for IR, ultrasonic,
 and ToF; record/plot raw and filtered ToF side by side; test GUI control and sensor
 control on all three physical motors; show the debounced button; document the
-integrator's contribution/challenges and the project application. GUI/ROS work
-and motor mounting/visible shaft markers remain separate deliverables.
+integrator's contribution/challenges and the project application. GUI/ROS
+implementation is present, but the complete hardware demonstration and motor
+mounting/visible shaft markers remain to be verified.
 
 Known original limitations retained rather than retuned:
 
