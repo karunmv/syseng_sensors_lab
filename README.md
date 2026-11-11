@@ -51,6 +51,64 @@ provides motor controls, mode/stop controls, sensor and motor state displays,
 paired raw/filtered ToF plots, a DC velocity plot, and labelled ToF CSV export.
 Physical tests and remaining assignment evidence are listed at the end of this README.
 
+## Sensor measurements and lab evidence
+
+### Potentiometer transfer function
+
+The lab requires a transfer-function plot based on our own measurements, with
+the physical quantity on the x-axis and raw electrical output on the y-axis.
+For the potentiometer, reference shaft angles were measured with a protractor,
+and 50 ADC readings were collected at each of ten positions. The plot shows
+shaft angle in degrees against mean ADC counts, with measured ADC standard
+deviation as error bars.
+
+![Potentiometer transfer function: measured shaft angle in degrees versus raw ADC counts, with a linear fit and end dead zones](pot_servo/figures/pot_transfer_function.png)
+
+The seven points in the usable **80–300°** region give the fitted relationship
+`ADC = 2.668 × angle_deg − 151.7`. The inverse conversion used by the firmware is
+`angle_deg = 0.37486 × ADC + 56.877`. Gray points show the end dead zones excluded
+from the fit. These measurements use a **3.3 V potentiometer supply** with the
+Uno's default ADC reference.
+
+Calibration measurements: [`pot_cal.csv`](pot_servo/data/pot_cal.csv).
+Fit and plot generation: [`make_figures.py`](pot_servo/scripts/make_figures.py).
+
+### Potentiometer conversion error
+
+The following plot reports estimated angle-conversion error over the usable
+range. Leave-one-out validation fits a line to six calibration points and
+predicts the seventh, repeating this for every point. Error is predicted angle
+minus reference angle; this is validation on held-out calibration points, not
+a separate independently collected test set.
+
+![Potentiometer leave-one-out conversion error versus reference angle: maximum absolute error 8.9 degrees and RMS error 4.4 degrees](pot_servo/figures/pot_error_loo.png)
+
+The **maximum absolute error is 8.9°** and **RMS error is 4.4°**. The largest
+errors occur near the ends of the fitted range. The calibration procedure,
+measurement limitations, and challenges are documented in
+[`pot_servo/README.md`](pot_servo/README.md).
+
+### ToF filtering: raw and filtered readings together
+
+The lab requires raw and filtered sensor data to be shown together to demonstrate
+noise reduction. The supplied Serial Plotter capture compares `Raw_ToF` (blue)
+with `Filtered_ToF` (orange) from the VL53L1X filtering experiment.
+
+![ToF filtering comparison in Serial Plotter: the blue raw readings fluctuate more than the smoother orange filtered readings](tof_filter/unfiltered_filtered_comparison.png)
+
+The filter uses **α = 0.1** and the **ten most recent valid samples**, with older
+samples weighted by successive powers of `0.9` and the weights normalized to
+sum to one. The nominal sample interval is **100 ms**, giving approximately one
+second of history when readings are valid. The smoother orange trace shows
+reduced short-term variation compared with the blue raw trace. Smoothing also
+slows the response to changes in distance.
+
+The [ToF sketch](tof_filter/sensors.ino) reports distances in millimeters; the
+screenshot does not label elapsed time. This figure demonstrates filtering,
+while measurement error against known distances over the ToF's usable range
+remains a separate requirement. Filter implementation:
+[`ExponentialFilter.cpp`](tof_filter/ExponentialFilter.cpp).
+
 ## Start the ROS 2 dashboard
 
 From the repository root:
@@ -261,10 +319,11 @@ STEPPER,ms,position_steps,target_steps,position_deg,target_deg,rounded_move_deg,
 
 This selection supplies four different sensors, including analog sensors, and
 three distinct sensor→motor pairings for a five-person team. The existing pot
-transfer plot and leave-one-out error analysis are retained in `pot_servo`.
+transfer plot, leave-one-out error analysis, and ToF raw/filtered comparison are
+embedded in the sensor-evidence section above.
 Before the demo, collect measured error over the usable range for IR, ultrasonic,
-and ToF; record/plot raw and filtered ToF side by side; test GUI control and sensor
-control on all three physical motors; show the debounced button; document the
+and ToF; test GUI control and sensor control on all three physical motors; show
+the debounced button; document the
 integrator's contribution/challenges and the project application. GUI/ROS
 implementation is present, but the complete hardware demonstration and motor
 mounting/visible shaft markers remain to be verified.
