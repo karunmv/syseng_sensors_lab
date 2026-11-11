@@ -123,6 +123,52 @@ The mean absolute error across these calibration points is **1.34 cm**,
 with a maximum absolute error of **2.00 cm**.
 
 
+### Ultrasonic Sensor Calibration and Conversion Error
+
+Ultrasonic sensor was used to measure object
+distance and control the stepper motor.
+
+Measurement error was calculated using:
+
+`Error = Measured distance - Actual distance`
+
+`Absolute error = |Error|`
+
+`Percentage error = (Absolute error / Actual distance) × 100`
+
+#### Ultrasonic distance error table
+
+| Actual (cm) | Measured (cm) | Error (cm) | Absolute error (cm) | Error (%) | Source |
+|---:|---:|---:|---:|---:|---|
+| 10 | 12 | +2 | 2 | 20.00 |
+| 20 | 21 | +1 | 1 | 5.00 |
+| 30 | 27 | -3 | 3 | 10.00 |
+| 40 | 38 | -2 | 2 | 5.00 | 
+| 50 | 48 | -2 | 2 | 4.00 | 
+| 60 | 57 | -3 | 3 | 5.00 | 
+| 70 | 68 | -2 | 2 | 2.86 | 
+| 80 | 77 | -3 | 3 | 3.75 | 
+
+The experimentally measured points gave a mean absolute
+error of 2.25 cm and a mean absolute percentage error of 6.95%.
+
+
+#### Error plot
+
+![Ultrasonic sensor absolute error](arduino/TSP05_Motor_Control/ultrasonic_error.png)
+
+The plot shows absolute distance error against actual distance.
+
+#### Stepper motor integration
+
+The ultrasonic distance is filtered using exponential moving
+average smoothing with alpha = 0.1.
+
+Distances between 15 and 75 cm are mapped to stepper target
+angles between 0 and 180 degrees. A 50-step deadband reduces
+unnecessary movement caused by fluctuations in sensor readings.
+
+
 ### ToF filtering: raw and filtered readings together
 
 The lab requires raw and filtered sensor data to be shown together to demonstrate
