@@ -396,7 +396,7 @@ STEPPER,ms,position_steps,target_steps,position_deg,target_deg,rounded_move_deg,
   completion they match. Sensor retargeting begins a new move record. Missed
   steps/slip cannot be detected; the GUI must not label the estimate as measured.
 
-## Assignment evidence still needed
+<!-- ## Assignment evidence still needed
 
 This selection supplies four different sensors, including analog sensors, and
 three distinct sensor→motor pairings for a five-person team. The existing pot
@@ -422,4 +422,4 @@ Known original limitations retained rather than retuned:
   unachievable at that PWM; demonstrate achievable velocities after hardware testing.
 - Pot calibration sketch comments mention 5 V wiring, while its measured data,
   final controller, and transfer plot specify a 3.3 V supply. This integration
-  follows the final calibrated controller and leaves those source files intact.
+  follows the final calibrated controller and leaves those source files intact. -->
