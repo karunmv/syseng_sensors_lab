@@ -171,6 +171,24 @@ unnecessary movement caused by fluctuations in sensor readings.
 
 ### ToF filtering: raw and filtered readings together
 
+#### Error measurement
+
+| Real | Measured | Absolute error |
+|---:|---:|---:|
+| 20 | 16 | 4 |
+| 30 | 28 | 2 |
+| 40 | 43 | 3 |
+| 50 | 48 | 2 |
+| 60 | 65 | 5 |
+| 70 | 75 | 5 |
+| 80 | 88 | 8 |
+| 90 | 97 | 7 |
+| 100 | 110 | 10 |
+
+![ToF sensor absolute error](tof_filter/tof_error.png)
+
+#### Raw and filtered readings
+
 The lab requires raw and filtered sensor data to be shown together to demonstrate
 noise reduction. The supplied Serial Plotter capture compares `Raw_ToF` (blue)
 with `Filtered_ToF` (orange) from the VL53L1X filtering experiment.
